@@ -186,6 +186,20 @@ export const generateReport = async (req, res) => {
       ((aiAnalysis.body_language_score || 50) * 0.15)
     );
 
+    // Generate ideal answers for weak areas
+    let idealAnswers = {};
+    try {
+      const { generateIdealAnswers } = await import('../services/claude.service.js');
+      const iaResult = await generateIdealAnswers(session.questions || [], answers);
+      idealAnswers = iaResult?.ideal_answers || {};
+    } catch { /* fallback: no ideal answers */ }
+
+    // Certificate ID for high scorers on Hard difficulty
+    let certificateId = null;
+    if (Math.min(100, overall) >= 80 && session.difficulty === 'Hard') {
+      certificateId = `LVLUP-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
+    }
+
     // Build report
     const report = {
       session_id,
@@ -206,6 +220,8 @@ export const generateReport = async (req, res) => {
       detailed_scores: aiAnalysis.detailed_scores || {},
       tips: aiAnalysis.tips || {},
       body_language_data: { confidence: aiAnalysis.body_language_score || 50 },
+      ideal_answers: idealAnswers,
+      certificate_id: certificateId,
     };
 
     // Add extra fields for frontend

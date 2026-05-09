@@ -5,63 +5,38 @@ const API_BASE = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000';
 
 const api = axios.create({
   baseURL: `${API_BASE}/api`,
-  headers: {
-    'Content-Type': 'application/json',
-  },
-  timeout: 60000, // 60s — Claude API calls can be slow
+  headers: { 'Content-Type': 'application/json' },
+  timeout: 60000,
 });
 
-// Auth header interceptor — adds Clerk token
 let getTokenFn = null;
-
-export const setAuthTokenGetter = (fn) => {
-  getTokenFn = fn;
-};
+export const setAuthTokenGetter = (fn) => { getTokenFn = fn; };
 
 api.interceptors.request.use(async (config) => {
   if (getTokenFn) {
     try {
       const token = await getTokenFn();
-      if (token) {
-        config.headers.Authorization = `Bearer ${token}`;
-      }
-    } catch (error) {
-      console.error('Failed to get auth token:', error);
-    }
+      if (token) config.headers.Authorization = `Bearer ${token}`;
+    } catch {}
   }
   return config;
 });
 
-// Response error interceptor
-// Only shows toast when the request config has { showToast: true }
 api.interceptors.response.use(
   (response) => response,
   (error) => {
     const showToast = error.config?.showToast === true;
-
     if (showToast) {
-      const message =
-        error.response?.data?.error ||
-        error.response?.data?.message ||
-        error.message ||
-        'Something went wrong';
-
-      if (error.response?.status === 401) {
-        toast.error('Session expired. Please sign in again.');
-      } else if (error.response?.status === 503) {
-        toast.error('Service unavailable. Please check your configuration.');
-      } else if (error.response?.status !== 404) {
-        toast.error(message);
-      }
+      const message = error.response?.data?.error || error.message || 'Something went wrong';
+      if (error.response?.status === 401) toast.error('Session expired. Please sign in again.');
+      else if (error.response?.status === 503) toast.error('Service unavailable.');
+      else if (error.response?.status !== 404) toast.error(message);
     }
-
     return Promise.reject(error);
   }
 );
 
-// ============================================
 // Profile API
-// ============================================
 export const profileAPI = {
   setup: (data) => api.post('/profile/setup', data),
   uploadResume: (file) => {
@@ -69,37 +44,35 @@ export const profileAPI = {
     formData.append('resume', file);
     return api.post('/profile/resume', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
-      timeout: 120000, // 2 min for resume parsing
+      timeout: 120000,
     });
   },
   fetchGitHub: (username) => api.get(`/profile/github?username=${username}`),
   getProfile: () => api.get('/profile/me'),
+  analyseJD: (data) => api.post('/profile/analyse-jd', data),
+  getGapAnalysis: (data) => api.post('/profile/gap-analysis', data || {}),
 };
 
-// ============================================
 // Interview API
-// ============================================
 export const interviewAPI = {
   start: (data) => api.post('/interview/start', data),
   next: (data) => api.post('/interview/next', data),
   end: (data) => api.post('/interview/end', data),
+  react: (data) => api.post('/interview/react', data),
+  coach: (data) => api.post('/interview/coach', data),
 };
 
-// ============================================
 // Report API
-// ============================================
 export const reportAPI = {
   generate: (data) => api.post('/report/generate', data),
   get: (sessionId) => api.get(`/report/${sessionId}`),
 };
 
-// ============================================
 // Dashboard API
-// ============================================
 export const dashboardAPI = {
   getSessions: () => api.get('/dashboard/sessions'),
   getStats: () => api.get('/dashboard/stats'),
-  getLeaderboard: () => api.get('/dashboard/leaderboard'),
+  getLeaderboard: (params) => api.get('/dashboard/leaderboard', { params }),
 };
 
 export default api;

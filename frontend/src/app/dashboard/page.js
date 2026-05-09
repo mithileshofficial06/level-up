@@ -16,7 +16,9 @@ import {
 } from 'lucide-react';
 import Navbar from '@/components/ui/Navbar';
 import Button from '@/components/ui/Button';
-import { dashboardAPI, setAuthTokenGetter } from '@/services/api';
+import GapAnalysis from '@/components/dashboard/GapAnalysis';
+import { dashboardAPI, profileAPI, setAuthTokenGetter } from '@/services/api';
+import { useAuth } from '@/context/AuthContext';
 
 const TABS = [
   { id: 'overview', label: 'Overview' },
@@ -293,29 +295,84 @@ function BadgesTab({ badges, stats }) {
 }
 
 /* ── Leaderboard Tab ── */
-function LeaderboardTab({ data }) {
-  if (!data?.length) {
-    return (
-      <div className="text-center py-16 rounded-xl bg-surface-900/30 border border-surface-700/15">
-        <Users className="w-7 h-7 text-surface-600 mx-auto mb-2" />
-        <p className="text-sm text-surface-400">No leaderboard data yet</p>
-      </div>
-    );
-  }
+function LeaderboardTab({ getToken, userCollege }) {
+  const router = useRouter();
+  const [scope, setScope] = useState('global');
+  const [data, setData] = useState([]);
+  const [myRank, setMyRank] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const load = async () => {
+      setLoading(true);
+      try {
+        setAuthTokenGetter(getToken);
+        const params = scope === 'college' && userCollege ? { scope: 'college', college: userCollege } : {};
+        const res = await dashboardAPI.getLeaderboard(params);
+        if (res.data?.leaderboard) setData(res.data.leaderboard);
+        if (res.data?.myRank) setMyRank(res.data.myRank);
+      } catch {}
+      finally { setLoading(false); }
+    };
+    load();
+  }, [scope, getToken, userCollege]);
+
+  const MEDALS = ['#fbbf24', '#c0c0c0', '#cd7f32']; // gold, silver, bronze
 
   return (
-    <div className="space-y-2">
-      {data.map((entry, i) => (
-        <motion.div key={i} initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.04 }}
-          className="flex items-center gap-4 p-4 rounded-xl bg-surface-900/40 border border-surface-700/15">
-          <span className={`w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold shrink-0 ${i < 3 ? 'bg-primary-500/10 text-primary-500' : 'bg-surface-800 text-surface-400'}`}>
-            {i + 1}
+    <div className="space-y-4">
+      {/* Toggle */}
+      <div className="flex items-center gap-2">
+        {['global', 'college'].map(s => (
+          <button key={s} onClick={() => setScope(s)}
+            className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${scope === s ? 'bg-primary-500/10 text-primary-400 border border-primary-500/20' : 'text-surface-400 hover:text-surface-300'}`}>
+            {s === 'global' ? 'All India' : 'My College'}
+          </button>
+        ))}
+        <span className="text-[10px] text-surface-500 ml-auto">Resets every Monday</span>
+      </div>
+
+      {/* Own rank */}
+      {myRank && (
+        <div className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-primary-500/5 border border-primary-500/15">
+          <Award className="w-4 h-4 text-primary-500" />
+          <span className="text-xs font-semibold text-primary-400">
+            You are #{myRank} {scope === 'college' && userCollege ? `at ${userCollege}` : 'overall'} this week
           </span>
-          <span className="flex-1 text-sm font-medium text-surface-200">{entry.name}</span>
-          <span className={`text-sm font-bold ${entry.score >= 75 ? 'text-success' : entry.score >= 50 ? 'text-warning' : 'text-error'}`}>{entry.score}</span>
-          {entry.grade && <span className="text-xs text-surface-400 font-medium">{entry.grade}</span>}
-        </motion.div>
-      ))}
+        </div>
+      )}
+
+      {loading ? (
+        <div className="flex justify-center py-12"><div className="w-6 h-6 rounded-full border-2 border-primary-500 border-t-transparent animate-spin" /></div>
+      ) : data.length > 0 ? (
+        <div className="space-y-2">
+          {data.map((entry, i) => (
+            <motion.div key={i} initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.04 }}
+              className={`flex items-center gap-4 p-4 rounded-xl border transition-all ${
+                entry.isCurrentUser ? 'bg-primary-500/5 border-primary-500/20' : 'bg-surface-900/40 border-surface-700/15'}`}>
+              <span className={`w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold shrink-0`}
+                style={{ backgroundColor: i < 3 ? `${MEDALS[i]}15` : '#1f1c18', color: i < 3 ? MEDALS[i] : '#8a7e6f' }}>
+                {entry.rank}
+              </span>
+              <div className="flex-1">
+                <span className="text-sm font-medium text-surface-200">{entry.name}</span>
+                {entry.college && <span className="text-[10px] text-surface-500 ml-2">{entry.college}</span>}
+              </div>
+              <span className={`text-sm font-bold ${entry.score >= 75 ? 'text-success' : entry.score >= 50 ? 'text-warning' : 'text-error'}`}>{entry.score}</span>
+              {entry.grade && <span className="text-xs text-surface-400 font-medium">{entry.grade}</span>}
+            </motion.div>
+          ))}
+        </div>
+      ) : (
+        <div className="text-center py-16 rounded-xl bg-surface-900/30 border border-surface-700/15">
+          <Users className="w-7 h-7 text-surface-600 mx-auto mb-2" />
+          <p className="text-sm text-surface-400">No leaderboard data yet</p>
+        </div>
+      )}
+
+      <Button size="sm" onClick={() => router.push('/setup')} icon={Mic} className="mx-auto">
+        Beat your rank — start an interview
+      </Button>
     </div>
   );
 }
@@ -324,11 +381,11 @@ function LeaderboardTab({ data }) {
 export default function DashboardPage() {
   const { user } = useUser();
   const { getToken } = useClerkAuth();
+  const { profile } = useAuth();
   const router = useRouter();
   const [tab, setTab] = useState('overview');
   const [stats, setStats] = useState({});
   const [sessions, setSessions] = useState([]);
-  const [leaderboard, setLeaderboard] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -346,19 +403,6 @@ export default function DashboardPage() {
     };
     load();
   }, [getToken]);
-
-  useEffect(() => {
-    if (tab === 'leaderboard' && leaderboard.length === 0) {
-      const fetch = async () => {
-        try {
-          setAuthTokenGetter(getToken);
-          const res = await dashboardAPI.getLeaderboard();
-          if (res.data?.leaderboard) setLeaderboard(res.data.leaderboard);
-        } catch {}
-      };
-      fetch();
-    }
-  }, [tab, getToken, leaderboard.length]);
 
   const greeting = () => {
     const h = new Date().getHours();
@@ -390,6 +434,11 @@ export default function DashboardPage() {
           <StatCard label="Streak" value={`${stats.streak || 0}d`} icon={Flame} delay={0.25} />
         </div>
 
+        {/* Gap Analysis */}
+        <div className="mb-6">
+          <GapAnalysis targetRole={profile?.targetRole || 'Full Stack Developer'} />
+        </div>
+
         {/* Tabs */}
         <div className="flex items-center gap-1 mb-6 border-b border-surface-700/20 pb-px">
           {TABS.map(t => (
@@ -411,7 +460,7 @@ export default function DashboardPage() {
             {tab === 'overview' && <OverviewTab key="overview" stats={stats} />}
             {tab === 'history' && <HistoryTab key="history" sessions={sessions} />}
             {tab === 'badges' && <BadgesTab key="badges" badges={stats.badges} stats={stats} />}
-            {tab === 'leaderboard' && <LeaderboardTab key="leaderboard" data={leaderboard} />}
+            {tab === 'leaderboard' && <LeaderboardTab key="leaderboard" getToken={getToken} userCollege={profile?.college || ''} />}
           </AnimatePresence>
         )}
       </div>

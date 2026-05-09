@@ -231,6 +231,99 @@ Return ONLY valid JSON.`;
 export const callClaude = callGemini;
 export const parseClaudeJSON = parseGeminiJSON;
 
+/**
+ * Generate a short interviewer reaction to the candidate's answer
+ */
+export const generateReaction = async (question, answer) => {
+  const FALLBACK_REACTIONS = [
+    'Interesting approach, let me note that.',
+    'Good, let\'s continue.',
+    'Okay, I see your reasoning.',
+    'Thanks, let\'s move forward.',
+    'Noted. Let\'s proceed.',
+    'That\'s a fair point.',
+    'Alright, let\'s try another one.',
+    'I see where you\'re going with that.',
+    'Hmm, interesting perspective.',
+    'Good effort, let\'s keep going.',
+  ];
+  try {
+    const prompt = `You are a professional interviewer. The candidate just answered: "${answer.substring(0, 300)}" to the question: "${question.substring(0, 200)}". Give ONE short natural reaction (max 8 words) like a real interviewer would say. Return just the reaction string, nothing else.`;
+    const response = await callGemini(prompt, 'Give your reaction now.', 60);
+    return response.replace(/["\n]/g, '').trim() || FALLBACK_REACTIONS[Math.floor(Math.random() * FALLBACK_REACTIONS.length)];
+  } catch {
+    return FALLBACK_REACTIONS[Math.floor(Math.random() * FALLBACK_REACTIONS.length)];
+  }
+};
+
+/**
+ * Generate a real-time coaching hint
+ */
+export const generateCoachHint = async (question, partialAnswer, questionType, fillerCount) => {
+  try {
+    const prompt = `You are a real-time interview coach. Given the question and partial answer so far, give ONE short coaching hint (max 10 words) to help the candidate improve their answer RIGHT NOW. Return JSON: { "hint": "string", "type": "tip"|"missing"|"good"|"filler" }. Be specific to the actual content, not generic.`;
+    const msg = `Question [${questionType}]: ${question}\nPartial answer so far: ${partialAnswer}\nFiller words used: ${fillerCount}`;
+    const response = await callGemini(prompt, msg, 100);
+    return parseGeminiJSON(response);
+  } catch {
+    if (fillerCount > 3) return { hint: 'Slow down, reduce filler words', type: 'filler' };
+    if (partialAnswer.split(/\s+/).length < 15) return { hint: 'Add a concrete example', type: 'missing' };
+    return { hint: 'Good structure, keep going', type: 'good' };
+  }
+};
+
+/**
+ * Analyse a job description
+ */
+export const analyseJobDescription = async (jdText) => {
+  try {
+    const prompt = `Extract from this job description: required_skills (array of strings), experience_years (string like "2-3 years"), company_type ("FAANG"|"startup"|"service"|"government"|"unknown"), key_topics (array of technical topics to focus on). Return JSON only.`;
+    const response = await callGemini(prompt, `Job Description:\n${jdText.substring(0, 3000)}`, 1000);
+    return parseGeminiJSON(response);
+  } catch {
+    // Basic keyword extraction fallback
+    const skills = ['JavaScript','Python','React','Node.js','AWS','Docker','SQL','Java','TypeScript','Go','Kubernetes','MongoDB']
+      .filter(s => jdText.toLowerCase().includes(s.toLowerCase()));
+    return { required_skills: skills.length ? skills : ['Could not parse'], experience_years: 'Unknown', company_type: 'unknown', key_topics: [] };
+  }
+};
+
+/**
+ * Generate resume gap analysis
+ */
+export const generateGapAnalysis = async (resumeSkills, targetRole, jdSkills = []) => {
+  try {
+    const prompt = `Compare this candidate's skills: ${JSON.stringify(resumeSkills)} against the requirements for a ${targetRole} position${jdSkills.length ? ` and this specific JD skills: ${JSON.stringify(jdSkills)}` : ''}. Return JSON: { "missing_skills": ["string"], "weak_areas": ["string"], "strong_areas": ["string"], "gap_score": 0-100, "learning_plan": [{ "skill": "string", "resources": ["string"], "days_to_learn": number }] }`;
+    const response = await callGemini(prompt, 'Analyze the skill gap now.', 2000);
+    return parseGeminiJSON(response);
+  } catch {
+    return {
+      missing_skills: ['System Design', 'Data Structures'],
+      weak_areas: ['DSA Practice', 'System Design Fundamentals'],
+      strong_areas: resumeSkills.slice(0, 5),
+      gap_score: 60,
+      learning_plan: [
+        { skill: 'System Design', resources: ['Grokking System Design'], days_to_learn: 30 },
+        { skill: 'DSA', resources: ['LeetCode', 'NeetCode 150'], days_to_learn: 45 },
+      ],
+    };
+  }
+};
+
+/**
+ * Generate ideal answers for weak questions
+ */
+export const generateIdealAnswers = async (questions, answers) => {
+  try {
+    const qa = questions.map((q, i) => `Q${i}: ${q.question}\nA${i}: ${answers[i]?.answer || '(skipped)'}`).join('\n\n');
+    const prompt = `For each question where the candidate's answer was weak, empty, or skipped, generate an ideal_answer (3-5 sentences showing what a great answer looks like). Return JSON: { "ideal_answers": { "0": "ideal answer text", "3": "ideal answer text" } } — only include indices where improvement is needed. Return ONLY valid JSON.`;
+    const response = await callGemini(prompt, `Interview transcript:\n${qa}`, 3000);
+    return parseGeminiJSON(response);
+  } catch {
+    return { ideal_answers: {} };
+  }
+};
+
 export default {
   callGemini,
   parseGeminiJSON,
@@ -238,4 +331,10 @@ export default {
   generateFollowUp,
   extractResumeData,
   summarizeGitHubProjects,
+  generateReaction,
+  generateCoachHint,
+  analyseJobDescription,
+  generateGapAnalysis,
+  generateIdealAnswers,
 };
+

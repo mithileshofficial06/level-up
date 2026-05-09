@@ -10,7 +10,7 @@ import { validateProfileSetup } from '../utils/validators.js';
 export const setupProfile = async (req, res) => {
   try {
     const { clerkId } = req.user;
-    const { email, name, avatar_url, github_url, linkedin_url, target_role } = req.body;
+    const { email, name, avatar_url, github_url, linkedin_url, target_role, college } = req.body;
 
     const validation = validateProfileSetup({ email, name, github_url, linkedin_url, target_role });
     if (!validation.isValid) {
@@ -32,7 +32,7 @@ export const setupProfile = async (req, res) => {
     if (existingUser) {
       const { data, error } = await supabase
         .from('users')
-        .update({ email, name, avatar_url, github_url, linkedin_url, target_role })
+        .update({ email, name, avatar_url, github_url, linkedin_url, target_role, college })
         .eq('clerk_id', clerkId)
         .select()
         .single();
@@ -42,7 +42,7 @@ export const setupProfile = async (req, res) => {
     } else {
       const { data, error } = await supabase
         .from('users')
-        .insert({ clerk_id: clerkId, email, name, avatar_url, github_url, linkedin_url, target_role })
+        .insert({ clerk_id: clerkId, email, name, avatar_url, github_url, linkedin_url, target_role, college })
         .select()
         .single();
 

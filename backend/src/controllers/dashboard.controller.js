@@ -175,22 +175,25 @@ export const getSessions = async (req, res) => {
  */
 export const getLeaderboard = async (req, res) => {
   try {
+    const { scope, college } = req.query;
+    const { clerkId } = req.user;
+
     const { data: reports } = await supabase
       .from('reports')
       .select('user_id, overall_score, grade, created_at')
       .not('overall_score', 'is', null)
       .order('overall_score', { ascending: false })
-      .limit(50);
+      .limit(100);
 
-    // Get usernames (first name only for privacy)
+    // Get usernames + colleges
     const userIds = [...new Set(reports?.map(r => r.user_id) || [])];
     let userMap = {};
     if (userIds.length > 0) {
       const { data: users } = await supabase
         .from('users')
-        .select('id, name')
+        .select('id, name, college, clerk_id')
         .in('id', userIds);
-      users?.forEach(u => { userMap[u.id] = u.name?.split(' ')[0] || 'Anonymous'; });
+      users?.forEach(u => { userMap[u.id] = { name: u.name?.split(' ')[0] || 'Anonymous', college: u.college || '', clerkId: u.clerk_id }; });
     }
 
     // Best score per user
@@ -201,16 +204,28 @@ export const getLeaderboard = async (req, res) => {
       }
     });
 
-    const leaderboard = Object.entries(bestByUser)
+    let leaderboard = Object.entries(bestByUser)
       .map(([userId, r]) => ({
-        name: userMap[userId] || 'Anonymous',
+        name: userMap[userId]?.name || 'Anonymous',
+        college: userMap[userId]?.college || '',
         score: r.overall_score,
         grade: r.grade,
+        isCurrentUser: userMap[userId]?.clerkId === clerkId,
       }))
-      .sort((a, b) => b.score - a.score)
-      .slice(0, 20);
+      .sort((a, b) => b.score - a.score);
 
-    res.json({ success: true, leaderboard });
+    // Filter by college if scope=college
+    if (scope === 'college' && college) {
+      leaderboard = leaderboard.filter(e => e.college.toLowerCase() === college.toLowerCase());
+    }
+
+    // Add rank
+    leaderboard = leaderboard.slice(0, 20).map((e, i) => ({ ...e, rank: i + 1 }));
+
+    // Find current user's rank
+    const myRank = leaderboard.find(e => e.isCurrentUser)?.rank || null;
+
+    res.json({ success: true, leaderboard, myRank });
   } catch (error) {
     console.error('Leaderboard error:', error);
     res.status(500).json({ error: error.message });

@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 import Navbar from '@/components/ui/Navbar';
 import Button from '@/components/ui/Button';
-import { interviewAPI, setAuthTokenGetter } from '@/services/api';
+import { interviewAPI, profileAPI, setAuthTokenGetter } from '@/services/api';
 import { COMPANY_TYPES, DIFFICULTIES, ROLES } from '@/utils/constants';
 import { useAuth } from '@/context/AuthContext';
 
@@ -28,6 +28,10 @@ export default function InterviewSetupPage() {
   const [micOk, setMicOk] = useState(null);
   const videoRef = useRef(null);
   const streamRef = useRef(null);
+  const [jdText, setJdText] = useState('');
+  const [jdUrl, setJdUrl] = useState('');
+  const [jdAnalyzing, setJdAnalyzing] = useState(false);
+  const [jdResult, setJdResult] = useState(null);
 
   useEffect(() => {
     return () => { streamRef.current?.getTracks().forEach(t => t.stop()); };
@@ -158,6 +162,53 @@ export default function InterviewSetupPage() {
                     </button>
                   ))}
                 </div>
+              </div>
+
+              {/* JD Import (optional) */}
+              <div>
+                <label className="flex items-center gap-2 text-xs font-semibold text-surface-400 uppercase tracking-widest mb-3">
+                  <Target className="w-3.5 h-3.5" /> Target Job (optional)
+                </label>
+                {jdResult ? (
+                  <div className="rounded-lg border border-success/20 bg-success/5 p-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <CheckCircle2 className="w-4 h-4 text-success" />
+                      <span className="text-xs font-semibold text-success">JD analysed — questions will be tailored</span>
+                    </div>
+                    {jdResult.required_skills?.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mb-2">
+                        {jdResult.required_skills.map((s, i) => (
+                          <span key={i} className="px-2 py-0.5 bg-surface-800 text-surface-200 text-[10px] font-medium rounded">{s}</span>
+                        ))}
+                      </div>
+                    )}
+                    <p className="text-[10px] text-surface-500">Experience: {jdResult.experience_years || 'N/A'} · Focus: {jdResult.company_type || 'N/A'}</p>
+                    <button onClick={() => { setJdResult(null); setJdText(''); }} className="text-[10px] text-primary-400 mt-1.5 hover:underline">Clear</button>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <textarea value={jdText} onChange={(e) => setJdText(e.target.value)}
+                      placeholder="Paste the job description from LinkedIn, Naukri, or anywhere..."
+                      className="w-full h-24 bg-surface-900/40 border border-surface-700/30 rounded-lg p-3 text-sm text-surface-200 placeholder-surface-600 focus:outline-none focus:ring-1 focus:ring-primary-500/30 resize-none" />
+                    <div className="flex gap-2">
+                      <input value={jdUrl} onChange={(e) => setJdUrl(e.target.value)}
+                        placeholder="Or paste a job URL" type="text"
+                        className="flex-1 bg-surface-900/40 border border-surface-700/30 rounded-lg px-3 py-2 text-sm text-surface-200 placeholder-surface-600 focus:outline-none focus:ring-1 focus:ring-primary-500/30" />
+                      <Button size="sm" disabled={(!jdText && !jdUrl) || jdAnalyzing} loading={jdAnalyzing}
+                        onClick={async () => {
+                          setJdAnalyzing(true);
+                          try {
+                            setAuthTokenGetter(getToken);
+                            const res = await profileAPI.analyseJD({ jd_text: jdText, jd_url: jdUrl });
+                            if (res.data?.data) setJdResult(res.data.data);
+                          } catch { toast.error('Could not analyse JD'); }
+                          finally { setJdAnalyzing(false); }
+                        }}>
+                        Analyse JD
+                      </Button>
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="flex justify-end pt-2">

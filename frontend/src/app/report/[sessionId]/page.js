@@ -1,17 +1,20 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { useAuth as useClerkAuth } from '@clerk/nextjs';
+import { useAuth as useClerkAuth, useUser } from '@clerk/nextjs';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   BarChart3, MessageSquare, Eye, Code, ArrowRight, RefreshCw,
   ChevronDown, ChevronUp, Brain, Award, TrendingUp,
-  AlertCircle, Clock, FileText, Mic
+  AlertCircle, Clock, FileText, Mic, Share2, Download, ExternalLink, Star
 } from 'lucide-react';
 import Navbar from '@/components/ui/Navbar';
 import Button from '@/components/ui/Button';
 import { SkeletonPage } from '@/components/ui/Loader';
+import IdealAnswerCard from '@/components/report/IdealAnswerCard';
+import ShareCard from '@/components/report/ShareCard';
+import Certificate from '@/components/report/Certificate';
 import { reportAPI, setAuthTokenGetter } from '@/services/api';
 
 /* ── Score Ring ── */
@@ -129,15 +132,24 @@ function SpeechStats({ data }) {
 }
 
 /* ── Transcript ── */
-function TranscriptSection({ transcript }) {
+function TranscriptSection({ transcript, idealAnswers = {} }) {
   const [showAll, setShowAll] = useState(false);
+  const [showIdeal, setShowIdeal] = useState(false);
   if (!transcript?.length) return null;
   const display = showAll ? transcript : transcript.slice(0, 3);
+  const hasIdeals = Object.keys(idealAnswers).length > 0;
 
   return (
     <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5 }}
       className="rounded-xl bg-surface-900/50 border border-surface-700/20 p-5">
-      <h3 className="text-xs font-semibold text-surface-400 uppercase tracking-widest mb-4">Transcript</h3>
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-xs font-semibold text-surface-400 uppercase tracking-widest">Transcript</h3>
+        {hasIdeals && (
+          <button onClick={() => setShowIdeal(!showIdeal)} className="text-[10px] text-primary-400 hover:text-primary-300 font-medium flex items-center gap-1">
+            <Star className="w-3 h-3" /> {showIdeal ? 'Hide' : 'Show'} ideal answers
+          </button>
+        )}
+      </div>
       <div className="space-y-3 max-h-[400px] overflow-y-auto">
         {display.map((item, i) => (
           <div key={i} className="rounded-lg bg-surface-800/30 border border-surface-700/15 p-3.5">
@@ -145,9 +157,15 @@ function TranscriptSection({ transcript }) {
               <Mic className="w-3.5 h-3.5 text-primary-500 mt-0.5 shrink-0" />
               <p className="text-xs font-medium text-surface-200">{item.question}</p>
             </div>
+            <p className="text-[10px] text-surface-500 ml-6 mb-0.5">Your answer</p>
             <p className={`text-xs leading-relaxed ml-6 ${item.answer === '(skipped)' ? 'text-surface-500 italic' : 'text-surface-300'}`}>
               {item.answer}
             </p>
+            {(showIdeal || idealAnswers[String(i)]) && idealAnswers[String(i)] && (
+              <div className="ml-6">
+                <IdealAnswerCard answer={idealAnswers[String(i)]} />
+              </div>
+            )}
           </div>
         ))}
       </div>
@@ -165,9 +183,12 @@ export default function ReportPage() {
   const { sessionId } = useParams();
   const router = useRouter();
   const { getToken } = useClerkAuth();
+  const { user } = useUser();
   const [report, setReport] = useState(null);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
+  const shareCardRef = useRef(null);
+  const certRef = useRef(null);
 
   useEffect(() => { fetchReport(); }, [sessionId]);
 
@@ -183,13 +204,64 @@ export default function ReportPage() {
     catch (e) { console.error(e); } finally { setGenerating(false); }
   };
 
+  const handleShareImage = async () => {
+    if (!shareCardRef.current) return;
+    try {
+      const html2canvas = (await import('html2canvas')).default;
+      shareCardRef.current.style.position = 'fixed';
+      shareCardRef.current.style.left = '0';
+      shareCardRef.current.style.top = '0';
+      const canvas = await html2canvas(shareCardRef.current, { scale: 2, useCORS: true });
+      shareCardRef.current.style.position = 'absolute';
+      shareCardRef.current.style.left = '-9999px';
+      canvas.toBlob(blob => {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a'); a.href = url; a.download = `levelup-report-${sessionId}.png`; a.click();
+        URL.revokeObjectURL(url);
+      });
+    } catch (e) { console.error('Share image error:', e); }
+  };
+
+  const handleLinkedIn = () => {
+    const url = encodeURIComponent(window.location.href);
+    window.open(`https://www.linkedin.com/sharing/share-offsite/?url=${url}`, '_blank');
+  };
+
+  const handleWhatsApp = () => {
+    const msg = encodeURIComponent(`I scored ${report?.overall_score}/100 on a mock interview! Check out LevelUp AI: ${window.location.href}`);
+    window.open(`https://wa.me/?text=${msg}`, '_blank');
+  };
+
+  const handleCertDownload = async () => {
+    if (!certRef.current) return;
+    try {
+      const html2canvas = (await import('html2canvas')).default;
+      certRef.current.style.position = 'fixed';
+      certRef.current.style.left = '0';
+      certRef.current.style.top = '0';
+      const canvas = await html2canvas(certRef.current, { scale: 2 });
+      certRef.current.style.position = 'absolute';
+      certRef.current.style.left = '-9999px';
+      const { jsPDF } = await import('jspdf');
+      const pdf = new jsPDF({ orientation: 'landscape', unit: 'px', format: [1122, 794] });
+      pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, 1122, 794);
+      pdf.save(`LevelUp-Certificate-${report?.certificate_id || 'cert'}.pdf`);
+    } catch (e) { console.error('Certificate error:', e); }
+  };
+
   if (loading) return <><Navbar /><SkeletonPage /></>;
 
   const ds = report?.detailed_scores || {};
+  const hasCertificate = report?.certificate_id && report?.overall_score >= 80;
 
   return (
     <div className="min-h-screen bg-surface-950">
       <Navbar />
+
+      {/* Hidden share card + certificate for canvas capture */}
+      {report && <ShareCard ref={shareCardRef} report={report} session={report} />}
+      {hasCertificate && <Certificate ref={certRef} report={report} userName={user?.fullName || 'Candidate'} session={report} />}
+
       <div className="max-w-4xl mx-auto px-6 py-10 space-y-6">
         <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
           <h1 className="text-2xl font-bold text-surface-50 tracking-tight mb-1">Interview Report</h1>
@@ -210,6 +282,21 @@ export default function ReportPage() {
           </motion.div>
         ) : (
           <div className="space-y-5">
+            {/* Certificate Banner */}
+            {hasCertificate && (
+              <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
+                className="rounded-xl bg-gradient-to-r from-primary-500/10 to-success/10 border border-primary-500/20 p-5 text-center">
+                <Award className="w-8 h-8 text-primary-500 mx-auto mb-2" />
+                <h3 className="text-base font-bold text-surface-100 mb-1">Certificate Unlocked!</h3>
+                <p className="text-xs text-surface-400 mb-3">You scored {report.overall_score}/100 on Hard difficulty</p>
+                <div className="flex justify-center gap-2">
+                  <Button size="sm" onClick={handleCertDownload} icon={Download}>Download Certificate</Button>
+                  <Button size="sm" variant="secondary" onClick={handleLinkedIn} icon={ExternalLink}>Share on LinkedIn</Button>
+                </div>
+                <p className="text-[9px] text-surface-500 mt-2">ID: {report.certificate_id}</p>
+              </motion.div>
+            )}
+
             {/* Hero */}
             <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
               className="rounded-xl bg-surface-900/60 border border-surface-700/20 p-6">
@@ -252,7 +339,18 @@ export default function ReportPage() {
             </div>
 
             <SpeechStats data={report.speech_data} />
-            <TranscriptSection transcript={report.transcript} />
+            <TranscriptSection transcript={report.transcript} idealAnswers={report.ideal_answers || {}} />
+
+            {/* Share + Actions */}
+            <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.6 }}
+              className="rounded-xl bg-surface-900/40 border border-surface-700/15 p-5">
+              <h3 className="text-xs font-semibold text-surface-400 uppercase tracking-widest mb-3">Share Result</h3>
+              <div className="flex flex-wrap gap-2">
+                <Button size="sm" variant="secondary" onClick={handleShareImage} icon={Download}>Download Image</Button>
+                <Button size="sm" variant="secondary" onClick={handleLinkedIn} icon={ExternalLink}>LinkedIn</Button>
+                <Button size="sm" variant="secondary" onClick={handleWhatsApp} icon={Share2}>WhatsApp</Button>
+              </div>
+            </motion.div>
 
             <div className="flex flex-col sm:flex-row justify-center gap-2.5 pt-2">
               <Button variant="secondary" size="lg" onClick={() => router.push('/setup')} icon={RefreshCw}>Practice Again</Button>

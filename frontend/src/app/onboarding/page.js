@@ -308,7 +308,15 @@ function GitHubStep({ githubUsername, setGithubUsername, githubData, setGithubDa
 }
 
 // Step 3: Details
-function DetailsStep({ linkedinUrl, setLinkedinUrl, targetRole, setTargetRole }) {
+function DetailsStep({ linkedinUrl, setLinkedinUrl, targetRole, setTargetRole, college, setCollege }) {
+  const TOP_COLLEGES = [
+    'IIT Bombay','IIT Delhi','IIT Madras','IIT Kanpur','IIT Kharagpur','IIT Roorkee','IIT Hyderabad','IIT Guwahati',
+    'NIT Trichy','NIT Warangal','NIT Surathkal','NIT Calicut','IIIT Hyderabad','BITS Pilani','VIT Vellore',
+    'SRM University','Anna University','Manipal IT','PSG Tech','DTU Delhi','NSUT Delhi','COEP Pune',
+    'VJTI Mumbai','College of Engineering Guindy','MIT Manipal',
+  ];
+  const filtered = college ? TOP_COLLEGES.filter(c => c.toLowerCase().includes(college.toLowerCase())) : [];
+
   return (
     <motion.div
       initial={{ opacity: 0, x: 20 }}
@@ -333,6 +341,30 @@ function DetailsStep({ linkedinUrl, setLinkedinUrl, targetRole, setTargetRole })
             onChange={(e) => setLinkedinUrl(e.target.value)}
             className="w-full pl-12 pr-4 py-3 bg-surface-900/60 border border-surface-700/30 rounded-lg text-surface-100 placeholder-surface-500 focus:outline-none focus:ring-1 focus:ring-primary-500/30 focus:border-primary-500/30 transition-all text-sm"
           />
+        </div>
+      </div>
+
+      {/* College */}
+      <div>
+        <label className="block text-sm font-medium text-surface-300 mb-2">College / University (optional)</label>
+        <div className="relative">
+          <input
+            type="text"
+            placeholder="Type your college name..."
+            value={college}
+            onChange={(e) => setCollege(e.target.value)}
+            className="w-full px-4 py-3 bg-surface-900/60 border border-surface-700/30 rounded-lg text-surface-100 placeholder-surface-500 focus:outline-none focus:ring-1 focus:ring-primary-500/30 focus:border-primary-500/30 transition-all text-sm"
+          />
+          {college && filtered.length > 0 && (
+            <div className="absolute z-10 left-0 right-0 top-full mt-1 rounded-lg border border-surface-700/30 bg-surface-900 shadow-xl max-h-40 overflow-y-auto">
+              {filtered.slice(0, 6).map((c, i) => (
+                <button key={i} onClick={() => setCollege(c)}
+                  className="w-full px-4 py-2 text-left text-sm text-surface-200 hover:bg-surface-800 transition-colors">
+                  {c}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
@@ -465,6 +497,7 @@ export default function OnboardingPage() {
   // Step 3 state
   const [linkedinUrl, setLinkedinUrl] = useState('');
   const [targetRole, setTargetRole] = useState('');
+  const [college, setCollege] = useState('');
 
   const handleNext = () => {
     if (currentStep === 1 && !resumeData) {
@@ -493,6 +526,7 @@ export default function OnboardingPage() {
         github_url: githubUsername ? `https://github.com/${githubUsername}` : '',
         linkedin_url: linkedinUrl,
         target_role: targetRole,
+        college: college,
       });
 
       toast.success('Profile setup complete!');
@@ -544,6 +578,8 @@ export default function OnboardingPage() {
                 setLinkedinUrl={setLinkedinUrl}
                 targetRole={targetRole}
                 setTargetRole={setTargetRole}
+                college={college}
+                setCollege={setCollege}
               />
             )}
             {currentStep === 4 && (
